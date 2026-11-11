@@ -1,7 +1,7 @@
 /* =====================================================================
    RIFAS - DINÁMICAS DEL EVENTO
-   Tablas nuevas para registrar ganadores, boletas redimidas y el
-   "espejo" (foto) de las compras al corte de las 12:00.
+   Tabla para registrar los ganadores (con la compra con la que ganaron)
+   y las boletas redimidas. No se usa espejo de compras.
    Ejecutar una sola vez en la base passport_roma_v1.
    ===================================================================== */
 
@@ -39,51 +39,11 @@ END
 GO
 
 /* ---------------------------------------------------------------------
-   Espejo de las 12:00: control (una fila por corte)
+   Si ya se habían creado las tablas del espejo (versión anterior), se eliminan
    --------------------------------------------------------------------- */
-IF OBJECT_ID('dbo.T_RIFA_ESPEJO_CONTROL') IS NULL
-BEGIN
-  CREATE TABLE [dbo].[T_RIFA_ESPEJO_CONTROL] (
-    [ID]               int IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-    [FECHA_CORTE]      datetime NOT NULL,
-    [FECHA_GENERACION] datetime DEFAULT GETDATE() NOT NULL,
-    [CLIENTES]         int DEFAULT 0 NOT NULL,
-    [USUARIO]          varchar(16) COLLATE Modern_Spanish_CI_AS NULL,
-    CONSTRAINT [UQ_T_RIFA_ESPEJO_CONTROL] UNIQUE ([FECHA_CORTE])
-  ) ON [PRIMARY]
-END
-GO
-
-/* Espejo: totales por cliente al corte */
-IF OBJECT_ID('dbo.T_RIFA_ESPEJO') IS NULL
-BEGIN
-  CREATE TABLE [dbo].[T_RIFA_ESPEJO] (
-    [ID]           int IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-    [FECHA_CORTE]  datetime NOT NULL,
-    [PASSPORT]     varchar(10) COLLATE Modern_Spanish_CI_AS NOT NULL,
-    [GRUPO]        char(3)     COLLATE Modern_Spanish_CI_AS NULL,
-    [COMPRA_TOTAL] numeric(18, 0) DEFAULT 0 NOT NULL,
-    [COMPRA_LABS]  numeric(18, 0) DEFAULT 0 NOT NULL,
-    [N_LABS]       int DEFAULT 0 NOT NULL,   -- labs participantes con compra > 0
-    CONSTRAINT [UQ_T_RIFA_ESPEJO] UNIQUE ([FECHA_CORTE], [PASSPORT])
-  ) ON [PRIMARY]
-END
-GO
-
-/* Espejo: detalle por cliente y laboratorio participante al corte */
-IF OBJECT_ID('dbo.T_RIFA_ESPEJO_LABS') IS NULL
-BEGIN
-  CREATE TABLE [dbo].[T_RIFA_ESPEJO_LABS] (
-    [ID]          int IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-    [FECHA_CORTE] datetime NOT NULL,
-    [PASSPORT]    varchar(10) COLLATE Modern_Spanish_CI_AS NOT NULL,
-    [NIT]         varchar(30) COLLATE Modern_Spanish_CI_AS NOT NULL,
-    [COMPRA]      numeric(18, 0) DEFAULT 0 NOT NULL
-  ) ON [PRIMARY]
-
-  CREATE NONCLUSTERED INDEX [IX_T_RIFA_ESPEJO_LABS_PASS]
-    ON [dbo].[T_RIFA_ESPEJO_LABS] ([FECHA_CORTE], [PASSPORT]) INCLUDE ([NIT], [COMPRA])
-END
+IF OBJECT_ID('dbo.T_RIFA_ESPEJO_LABS')    IS NOT NULL DROP TABLE [dbo].[T_RIFA_ESPEJO_LABS]
+IF OBJECT_ID('dbo.T_RIFA_ESPEJO')         IS NOT NULL DROP TABLE [dbo].[T_RIFA_ESPEJO]
+IF OBJECT_ID('dbo.T_RIFA_ESPEJO_CONTROL') IS NOT NULL DROP TABLE [dbo].[T_RIFA_ESPEJO_CONTROL]
 GO
 
 /* ---------------------------------------------------------------------
@@ -105,7 +65,4 @@ GO
    Reinicio para pruebas (NO ejecutar el día del evento)
    ---------------------------------------------------------------------
    DELETE FROM T_RIFA_DINAMICAS_GANADORES;
-   DELETE FROM T_RIFA_ESPEJO_LABS;
-   DELETE FROM T_RIFA_ESPEJO;
-   DELETE FROM T_RIFA_ESPEJO_CONTROL;
 */

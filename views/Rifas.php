@@ -61,7 +61,6 @@
   <ul class="nav nav-tabs" role="tablist">
     <li class="active"><a href="#tabCliente"   data-toggle="tab"><span class="fa fa-search"></span> Consulta cliente</a></li>
     <li><a href="#tabGanadores" data-toggle="tab"><span class="fa fa-trophy"></span> Ganadores y boletas</a></li>
-    <li><a href="#tabEspejo"    data-toggle="tab"><span class="fa fa-camera"></span> Espejo <span id="evTabCorte"></span></a></li>
   </ul>
 
   <div class="tab-content" style="padding-top:15px;">
@@ -87,16 +86,11 @@
 
       <div id="evResultado" style="display:none; margin-top:15px;">
         <div class="row">
-          <div class="col-md-2 col-sm-6">
+          <div class="col-md-3 col-sm-6">
             <div class="ev-card"><small>COMPRA TOTAL</small><div class="ev-big" id="SpCompras"></div></div>
           </div>
-          <div class="col-md-2 col-sm-6">
-            <div class="ev-card"><small>COMPRA LAB. PARTICIPANTES</small><div class="ev-big text-danger" id="comprasLabPart"></div></div>
-          </div>
           <div class="col-md-3 col-sm-6">
-            <div class="ev-card"><small>AL CORTE <span class="evHoraCorte"></span> <span id="evFuenteCorte"></span></small>
-              <div style="font-size:16px;">Total: <b id="SpComprasAm"></b><br>Labs: <b id="SpLabsAm"></b></div>
-            </div>
+            <div class="ev-card"><small>COMPRA LAB. PARTICIPANTES</small><div class="ev-big text-danger" id="comprasLabPart"></div></div>
           </div>
           <div class="col-md-3 col-sm-6">
             <div class="ev-card">
@@ -105,7 +99,7 @@
               <button class="btn btn-danger"  id="n_lab_sin_compas" title="Ver laboratorios donde no ha comprado"></button>
             </div>
           </div>
-          <div class="col-md-2 col-sm-6">
+          <div class="col-md-3 col-sm-6">
             <div class="ev-card"><small>REGISTRO / GRUPO</small><div id="evRegistrado" style="font-size:16px;"></div></div>
           </div>
         </div>
@@ -121,7 +115,6 @@
                 <th>#</th>
                 <th>NIT</th>
                 <th>LABORATORIO</th>
-                <th class="text-right">COMPRA AL CORTE <span class="evHoraCorte"></span></th>
                 <th class="text-right">COMPRA TOTAL</th>
                 <th class="text-center">&ge; $100.000</th>
                 <th class="text-center">&ge; $1.000.000</th>
@@ -155,21 +148,6 @@
             </tr>
           </thead>
           <tbody id="evGanadores"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ===================== ESPEJO 12:00 ===================== -->
-    <div class="tab-pane" id="tabEspejo">
-      <div id="evEspejoEstado"></div>
-      <div class="table-responsive">
-        <table class="table table-striped table-condensed">
-          <thead>
-            <tr><th>#</th><th>CÓDIGO</th><th>CLIENTE</th><th>GRUPO</th>
-                <th class="text-right">COMPRA TOTAL</th><th class="text-right">COMPRA LABS</th>
-                <th class="text-center">LABS CON COMPRA</th><th class="text-center">GANÓ (MAÑANA)</th></tr>
-          </thead>
-          <tbody id="evEspejoLista"></tbody>
         </table>
       </div>
     </div>

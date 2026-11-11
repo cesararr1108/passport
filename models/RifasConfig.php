@@ -15,7 +15,7 @@ define('EV_PEDIDOS_WHERE', '1 = 1');
 // Fecha del evento AAAA-MM-DD. Vacío = fecha actual del servidor SQL
 define('EV_FECHA_EVENTO', '');
 
-// Las dinámicas de la mañana se habilitan HASTA esta hora (y se toma el espejo)
+// Las dinámicas de la mañana sólo se pueden registrar HASTA esta hora (no hay espejo)
 define('EV_HORA_CORTE_MANANA', '12:00');
 
 // Las dinámicas de la tarde se habilitan A PARTIR de esta hora
@@ -38,7 +38,7 @@ define('EV_NIT_EXACTO', false);
 
 /* ---------------------------------------------------------------------
    Reglas por dinámica.
-   ventana : 'manana' (hasta EV_HORA_CORTE_MANANA, compras al corte)
+   ventana : 'manana' (registro habilitado sólo hasta EV_HORA_CORTE_MANANA)
              'tarde'  (desde EV_HORA_INICIO_TARDE, compras de todo el día)
    reglas  : por grupo (GRUPO1 del cliente). '*' = demás grupos
      total_min   compra total mínima (todos los laboratorios)
