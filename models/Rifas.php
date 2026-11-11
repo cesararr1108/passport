@@ -94,9 +94,12 @@
  }
 
  /* =====================================================================
-    CONTEXTO DE TIEMPO
-    Las dinámicas de la mañana sólo se pueden registrar HASTA EV_HORA_CORTE_MANANA.
-    No se toma espejo: al registrar se guarda la compra con la que ganó el cliente.
+    CONTEXTO DE TIEMPO + CORTE DE LAS 12:00
+    Dinámicas de la mañana (#1 Ruleta, #2 iPhone 18 Pro):
+      - Antes de las 12:00 se validan con la venta que lleva el cliente.
+      - A las 12:00 el usuario hace el CORTE (guarda la venta de cada cliente
+        hasta esa hora en T_RIFA_ESPEJO / T_RIFA_ESPEJO_LABS).
+      - Después de las 12:00 se validan y registran con la info del corte.
     ===================================================================== */
  function evContexto(){
 	 static $ctx = null;
@@ -114,15 +117,34 @@
 		 'corte'          => $corte,
 		 'tarde'          => $tarde,
 		 'manana_abierta' => $ahora < $corte,
-		 'tarde_abierta'  => $ahora >= $tarde
+		 'tarde_abierta'  => $ahora >= $tarde,
+		 'espejo'         => null
 	 );
+
+	 // El corte lo hace el usuario (EV_ESPEJO_GENERAR) después de las 12:00
+	 $ctx['espejo'] = evEspejoEstado($corte);
+	 // La mañana se puede validar antes de las 12:00 (venta actual) o después con el corte hecho
+	 $ctx['manana_valida'] = $ctx['manana_abierta'] || $ctx['espejo'] !== null;
 	 return $ctx;
+ }
+
+ function evEspejoEstado($corte){
+	 $r = evRows("SELECT
+					fecha_corte      = CONVERT(varchar(19), FECHA_CORTE, 120),
+					fecha_generacion = CONVERT(varchar(19), FECHA_GENERACION, 120),
+					clientes         = CLIENTES,
+					usuario          = USUARIO
+				FROM T_RIFA_ESPEJO_CONTROL
+				WHERE FECHA_CORTE = ".evSqlFecha($corte));
+	 return count($r) > 0 ? $r[0] : null;
  }
 
  /* CTEs:  R   = laboratorios participantes (T_RIFAS)
            LAB = terceros (T_TERCEROS) que pertenecen a cada laboratorio participante
-           C   = compras por cliente y laboratorio participante */
- function evSqlCte($filtroPedidos){
+           C   = compras por cliente y laboratorio participante
+                 COMPRA    = todo el día
+                 COMPRA_AM = antes del corte de la mañana */
+ function evSqlCte($filtroPedidos, $corte){
 	 return "
 		WITH R AS (
 			SELECT
@@ -141,7 +163,8 @@
 			SELECT
 				P.PASSPORT,
 				LAB.NIT,
-				COMPRA = SUM(P.VALOR_TOTAL)
+				COMPRA    = SUM(P.VALOR_TOTAL),
+				COMPRA_AM = SUM(CASE WHEN P.FECHA_HORA < ".evSqlFecha($corte)." THEN P.VALOR_TOTAL ELSE 0 END)
 			FROM ".EV_TABLA_PEDIDOS." P
 			INNER JOIN T_MATERIALES M ON M.CODIGO_MATERIAL = P.CODIGO
 			INNER JOIN LAB            ON LAB.CODIGO_SAP    = M.CODIGO_SAP
@@ -150,6 +173,51 @@
 				P.PASSPORT,
 				LAB.NIT
 		) ";
+ }
+
+ // Corte: guarda las compras hasta las 12:00 (una sola vez; seguro ante dos usuarios simultáneos)
+ function evEspejoGenerar($corte){
+	 $fc = evSqlFecha($corte);
+	 evRows("SET NOCOUNT ON; SET XACT_ABORT ON;
+		BEGIN TRAN;
+		IF NOT EXISTS (SELECT 1 FROM T_RIFA_ESPEJO_CONTROL WITH (UPDLOCK, HOLDLOCK) WHERE FECHA_CORTE = ".$fc.")
+		BEGIN
+			INSERT INTO T_RIFA_ESPEJO_CONTROL (FECHA_CORTE, USUARIO) VALUES (".$fc.", '".evUsuario()."');
+
+			".evSqlCte("P.FECHA_HORA < ".$fc, $corte)."
+			INSERT INTO T_RIFA_ESPEJO_LABS (FECHA_CORTE, PASSPORT, NIT, COMPRA)
+			SELECT ".$fc.", C.PASSPORT, C.NIT, C.COMPRA
+			FROM C
+			WHERE C.COMPRA <> 0;
+
+			INSERT INTO T_RIFA_ESPEJO (FECHA_CORTE, PASSPORT, GRUPO, COMPRA_TOTAL, COMPRA_LABS, N_LABS)
+			SELECT
+				".$fc.",
+				X.PASSPORT,
+				(SELECT TOP 1 T.GRUPO1 FROM T_TERCEROS T WHERE T.CODIGO_SAP = X.PASSPORT),
+				X.TOTAL,
+				ISNULL(L.COMPRA, 0),
+				ISNULL(L.N, 0)
+			FROM (
+				SELECT P.PASSPORT, TOTAL = SUM(P.VALOR_TOTAL)
+				FROM ".EV_TABLA_PEDIDOS." P
+				WHERE P.FECHA_HORA < ".$fc." AND (".EV_PEDIDOS_WHERE.")
+				GROUP BY P.PASSPORT
+			) X
+			LEFT JOIN (
+				SELECT PASSPORT, COMPRA = SUM(COMPRA), N = SUM(CASE WHEN COMPRA > 0 THEN 1 ELSE 0 END)
+				FROM T_RIFA_ESPEJO_LABS
+				WHERE FECHA_CORTE = ".$fc."
+				GROUP BY PASSPORT
+			) L ON L.PASSPORT = X.PASSPORT;
+
+			UPDATE T_RIFA_ESPEJO_CONTROL
+			SET CLIENTES = (SELECT COUNT(*) FROM T_RIFA_ESPEJO WHERE FECHA_CORTE = ".$fc.")
+			WHERE FECHA_CORTE = ".$fc.";
+		END
+		COMMIT;
+		SELECT n = 1");
+	 return evEspejoEstado($corte);
  }
 
  /* =====================================================================
@@ -191,26 +259,39 @@
 	 }
 	 $grupo = trim($cli[0]['grupo']);
 
-	 $labs = evRows(evSqlCte("P.PASSPORT = '".$p."'")."
+	 // Después de las 12:00, las compras de la mañana salen del corte
+	 $usarEspejo = !$ctx['manana_abierta'] && $ctx['espejo'] !== null;
+	 $fc = evSqlFecha($ctx['corte']);
+
+	 $labs = evRows(evSqlCte("P.PASSPORT = '".$p."'", $ctx['corte'])."
 		SELECT
-			nit     = R.NIT,
-			nombres = R.NOMBRES,
-			compra  = ISNULL(C.COMPRA, 0)
+			nit       = R.NIT,
+			nombres   = R.NOMBRES,
+			compra    = ISNULL(C.COMPRA, 0),
+			compra_am = ".($usarEspejo ? "ISNULL(E.COMPRA, 0)" : "ISNULL(C.COMPRA_AM, 0)")."
 		FROM R
 		LEFT JOIN C ON C.NIT = R.NIT
+		".($usarEspejo ? "LEFT JOIN T_RIFA_ESPEJO_LABS E ON E.FECHA_CORTE = ".$fc." AND E.PASSPORT = '".$p."' AND E.NIT = R.NIT" : "")."
 		ORDER BY
 			ISNULL(C.COMPRA, 0) DESC,
 			R.NOMBRES");
 
-	 $tot = evRows("SELECT total = ISNULL(SUM(P.VALOR_TOTAL), 0)
+	 $tot = evRows("SELECT
+						total    = ISNULL(SUM(P.VALOR_TOTAL), 0),
+						total_am = ".($usarEspejo
+							? "ISNULL((SELECT TOP 1 E.COMPRA_TOTAL FROM T_RIFA_ESPEJO E WHERE E.FECHA_CORTE = ".$fc." AND E.PASSPORT = '".$p."'), 0)"
+							: "ISNULL(SUM(CASE WHEN P.FECHA_HORA < ".$fc." THEN P.VALOR_TOTAL END), 0)")."
 					FROM ".EV_TABLA_PEDIDOS." P
 					WHERE P.PASSPORT = '".$p."' AND (".EV_PEDIDOS_WHERE.")");
-	 $total = (float)$tot[0]['total'];
+	 $total   = (float)$tot[0]['total'];
+	 $totalAm = (float)$tot[0]['total_am'];
 
-	 $compraLabs = 0; $labsConCompra = 0;
+	 $compraLabs = 0; $compraLabsAm = 0; $labsConCompra = 0;
 	 foreach($labs as $i => $l){
-		 $labs[$i]['compra'] = (float)$l['compra'];
-		 $compraLabs += $labs[$i]['compra'];
+		 $labs[$i]['compra']    = (float)$l['compra'];
+		 $labs[$i]['compra_am'] = (float)$l['compra_am'];
+		 $compraLabs   += $labs[$i]['compra'];
+		 $compraLabsAm += $labs[$i]['compra_am'];
 		 if($labs[$i]['compra'] > 0){ $labsConCompra++; }
 	 }
 
@@ -242,13 +323,14 @@
 	 foreach(evDinamicas() as $key => $d){
 		 $am      = $d['ventana'] == 'manana';
 		 $regla   = evRegla($d, $grupo);
-		 $tVent   = $total;
-		 $lVent   = $compraLabs;
-		 $abierta = $am ? $ctx['manana_abierta'] : $ctx['tarde_abierta'];
+		 $campo   = $am ? 'compra_am' : 'compra';
+		 $tVent   = $am ? $totalAm : $total;
+		 $lVent   = $am ? $compraLabsAm : $compraLabs;
+		 $abierta = $am ? $ctx['manana_valida'] : $ctx['tarde_abierta'];
 
 		 $labsCumple = 0;
 		 foreach($labs as $l){
-			 if($l['compra'] > 0 && $l['compra'] >= $regla['lab_min']){ $labsCumple++; }
+			 if($l[$campo] > 0 && $l[$campo] >= $regla['lab_min']){ $labsCumple++; }
 		 }
 		 $cumpleTotal = $tVent >= $regla['total_min'];
 		 $cumpleLabs  = $labsCumple >= $regla['n_labs'];
@@ -275,7 +357,7 @@
 		 }elseif($excluido){
 			 $estado = 'EXCLUIDO';
 		 }elseif($am && !$abierta){
-			 $estado = 'CERRADA';
+			 $estado = 'SIN_CORTE';
 		 }elseif(!$am && !$abierta){
 			 $estado = 'NO_HABILITADA';
 		 }elseif($cumple && !$okRegistro){
@@ -317,11 +399,14 @@
 		 'ahora'           => $ctx['ahora'],
 		 'corte'           => $ctx['corte'],
 		 'tarde'           => $ctx['tarde'],
+		 'usa_espejo'      => $usarEspejo,
 		 'cliente'         => $cli[0],
 		 'grupo'           => $grupo,
 		 'registrado'      => $registrado,
 		 'compra_total'    => $total,
+		 'compra_total_am' => $totalAm,
 		 'compra_labs'     => $compraLabs,
+		 'compra_labs_am'  => $compraLabsAm,
 		 'labs'            => $labs,
 		 'n_labs'          => count($labs),
 		 'labs_con_compra' => $labsConCompra,
@@ -488,7 +573,7 @@
 	   DINÁMICAS DEL EVENTO
 	   ===================================================================== */
 
-	// Reglas y horarios
+	// Reglas, horarios y estado del espejo
 	case "EV_CONFIG":
 		 $ctx = evContexto();
 		 $ds  = array();
@@ -509,8 +594,10 @@
 			 'hora_corte'     => EV_HORA_CORTE_MANANA,
 			 'hora_tarde'     => EV_HORA_INICIO_TARDE,
 			 'manana_abierta' => $ctx['manana_abierta'],
+			 'manana_valida'  => $ctx['manana_valida'],
 			 'tarde_abierta'  => $ctx['tarde_abierta'],
 			 'grupo_especial' => EV_GRUPO_ESPECIAL,
+			 'espejo'         => $ctx['espejo'],
 			 'dinamicas'      => $ds
 		 ));
 	break;
@@ -532,7 +619,7 @@
 		 }
 		 if(!$d['abierta']){
 			 evError($d['ventana'] == 'manana'
-				 ? $d['nombre'].' cerró a las '.EV_HORA_CORTE_MANANA
+				 ? 'Ya pasaron las '.EV_HORA_CORTE_MANANA.': falta hacer el corte para validar '.$d['nombre']
 				 : $d['nombre'].' se habilita a partir de las '.EV_HORA_INICIO_TARDE);
 		 }
 		 if($d['excluido']){
@@ -580,9 +667,9 @@
 				                           WHERE PASSPORT = '".$p."' AND DINAMICA IN (".implode(',', $otras)."))";
 			 }
 		 }
-		 // Por si el cierre ocurre entre la evaluación y el insert
+		 // Mañana: antes de las 12:00, o después sólo si ya se hizo el corte
 		 $ventana = $d['ventana'] == 'manana'
-			 ? " AND GETDATE() < ".evSqlFecha($ctx['corte'])
+			 ? " AND (GETDATE() < ".evSqlFecha($ctx['corte'])." OR EXISTS (SELECT 1 FROM T_RIFA_ESPEJO_CONTROL WHERE FECHA_CORTE = ".evSqlFecha($ctx['corte'])."))"
 			 : " AND GETDATE() >= ".evSqlFecha($ctx['tarde']);
 
 		 $r = evRows("SET NOCOUNT ON;
@@ -665,6 +752,42 @@
 						FROM T_RIFA_DINAMICAS_GANADORES
 						GROUP BY DINAMICA");
 		 evJson(array('ok' => true, 'rows' => $rows, 'resumen' => $res));
+	break;
+
+	// El usuario hace el corte de las 12:00 (sólo después de esa hora, una sola vez)
+	case "EV_ESPEJO_GENERAR":
+		 $ctx = evContexto();
+		 if($ctx['manana_abierta']){
+			 evError('El corte se hace a partir de las '.EV_HORA_CORTE_MANANA);
+		 }
+		 evJson(array('ok' => true, 'espejo' => evEspejoGenerar($ctx['corte'])));
+	break;
+
+	// Clientes del corte con su estado en las dinámicas de la mañana
+	case "EV_ESPEJO_LISTA":
+		 $ctx = evContexto();
+		 if($ctx['espejo'] === null){
+			 evJson(array('ok' => true, 'espejo' => null, 'rows' => array()));
+		 }
+		 $fc = evSqlFecha($ctx['corte']);
+		 $am = array();
+		 foreach(evDinamicas() as $k => $d){
+			 if($d['ventana'] == 'manana'){ $am[] = "'".evEsc($k)."'"; }
+		 }
+		 $rows = evRows("SELECT
+							passport     = E.PASSPORT,
+							nombres      = (SELECT TOP 1 ISNULL(NULLIF(LTRIM(T.RAZON_COMERCIAL), ''), T.NOMBRES)
+							                FROM T_TERCEROS T WHERE T.CODIGO_SAP = E.PASSPORT),
+							grupo        = E.GRUPO,
+							compra_total = E.COMPRA_TOTAL,
+							compra_labs  = E.COMPRA_LABS,
+							n_labs       = E.N_LABS,
+							ganadas      = (SELECT COUNT(*) FROM T_RIFA_DINAMICAS_GANADORES G
+							                WHERE G.PASSPORT = E.PASSPORT AND G.DINAMICA IN (".(count($am) ? implode(',', $am) : "''")."))
+						FROM T_RIFA_ESPEJO E
+						WHERE E.FECHA_CORTE = ".$fc."
+						ORDER BY E.COMPRA_TOTAL DESC");
+		 evJson(array('ok' => true, 'espejo' => $ctx['espejo'], 'rows' => $rows));
 	break;
  }
 ?>

@@ -3,7 +3,7 @@
 PHP 5.4 + SQL Server (extensión `mssql_*`).
 
 ## Instalación
-1. Ejecutar `sql/rifas_dinamicas.sql` en `passport_roma_v1` (crea la tabla de ganadores; si existían las tablas del espejo, las elimina).
+1. Ejecutar `sql/rifas_dinamicas.sql` en `passport_roma_v1` (crea las tablas de ganadores y espejo).
 2. Copiar `models/`, `controllers/`, `views/`, `resources/pdf/` sobre el proyecto
    (`models/funciones.php` y `resources/fpdf/` no se versionan: se usan los existentes).
 3. Ajustar montos/horas en `models/RifasConfig.php`.
@@ -16,11 +16,14 @@ PHP 5.4 + SQL Server (extensión `mssql_*`).
 | #3 iPhone 18 / bono $3M | desde 18:00 | total ≥ $6.000.000 y ≥ $100.000 en 20 labs | total ≥ $15.000.000 y ≥ $1.000.000 en 10 labs |
 | Electrodomésticos | desde 18:00 | total ≥ $1.000.000 | igual |
 
-- Las dinámicas de la mañana (#1 y #2) sólo se pueden **registrar hasta las 12:00**. No hay corte ni
-  espejo: a las 12:00 se cierran y queda únicamente el registro de quién ganó y con qué monto
-  (`COMPRA_TOTAL`, `COMPRA_LABS`, `N_LABS` al momento de ganar).
+- Dinámicas de la mañana (#1 Ruleta y #2 iPhone 18 Pro):
+  - **Antes de las 12:00** se validan con la venta que lleva el cliente.
+  - **A las 12:00 el usuario hace el corte** (botón "Hacer corte", pestaña *Corte*): se guarda la venta
+    de cada cliente hasta las 12:00 en `T_RIFA_ESPEJO` / `T_RIFA_ESPEJO_LABS` (una sola vez, con fecha y usuario).
+  - **Después de las 12:00** se validan y registran con la información del corte. Mientras no se haga el
+    corte, estas dinámicas quedan en "Falta hacer el corte" y no permiten registrar.
 - Cada cliente gana una sola vez cada dinámica (`UNIQUE (DINAMICA, PASSPORT)`). Quien ganó en la
-  mañana sí participa en las de la tarde. Si antes de las 12:00 compra más y gana boletas adicionales
+  mañana sí participa en las de la tarde. Si antes del corte compra más y gana boletas adicionales
   (#2 grupo 100), el botón "Sumar boletas" las actualiza.
 - `T_RIFA_DINAMICAS_GANADORES` guarda el ganador, la compra al momento de ganar, las boletas
   ganadas, las redimidas (`BOLETAS_REDIMIDAS`, `REDIMIDO`, fecha y usuario de redención).

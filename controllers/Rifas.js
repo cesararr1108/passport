@@ -1,15 +1,14 @@
 /* =====================================================================
    RIFAS - DINÁMICAS DEL EVENTO
-   - Dinámica #1 Ruleta            (sólo hasta las 12:00)
-   - Dinámica #2 iPhone 18 Pro      (sólo hasta las 12:00)
+   - Dinámica #1 Ruleta            (antes de las 12:00 venta actual; después, corte de las 12:00)
+   - Dinámica #2 iPhone 18 Pro      (antes de las 12:00 venta actual; después, corte de las 12:00)
    - Dinámica #3 iPhone 18 / bono   (desde las 6:00 pm, compras del día)
    - Sorteo de electrodomésticos    (desde las 6:00 pm, compras del día)
    Las reglas (montos, labs, horas) vienen de models/RifasConfig.php
-   Al registrar un ganador se guarda la compra con la que ganó.
    ===================================================================== */
 var URL_RIFAS = '../models/Rifas.php';
 var URL_PDF_BOLETA = '../resources/pdf/pdf_boleta_dinamica.php';
-var EV_VERSION = 'rifas-dinamicas-v2';
+var EV_VERSION = 'rifas-dinamicas-v3';
 var EV_CONFIG = null;   // reglas y horarios
 var EV_DATOS = null;    // última consulta de cliente
 
@@ -27,10 +26,12 @@ $(function(){
 	$(document).on('click', '.ev-registrar', function(){ Registrar($(this).data('din')); });
 	$(document).on('click', '.ev-redimir',   function(){ Redimir($(this).data('id'), $(this).data('pend'), $(this).data('nombre')); });
 	$(document).on('click', '.ev-imprimir',  function(){ ImprimirBoletas($(this).data('id')); });
+	$(document).on('click', '#btnEspejoGenerar', GenerarEspejo);
 
 	$('a[data-toggle="tab"]').on('shown.bs.tab', function(e){
 		var tab = $(e.target).attr('href');
 		if(tab == '#tabGanadores'){ CargarGanadores(); }
+		if(tab == '#tabEspejo'){ CargarEspejo(); }
 	});
 
 	CargarConfig(function(){
@@ -129,8 +130,11 @@ function CargarConfig(fn){
 		var primera = EV_CONFIG === null;
 		EV_CONFIG = r;
 		$('.evHoraCorte').text(HoraAmPm(r.hora_corte));
+		$('#evTabCorte').text(HoraAmPm(r.hora_corte));
 		$('#evReloj').html('<span class="fa fa-clock-o"></span> Hora servidor: <b>' + Esc(r.ahora.substring(11, 16)) + '</b>' +
-			' &nbsp; Mañana: ' + (r.manana_abierta ? '<span class="label label-success">ABIERTA</span>' : '<span class="label label-default">CERRADA</span>') +
+			' &nbsp; Mañana: ' + (r.manana_abierta ? '<span class="label label-success">VENTA ACTUAL</span>'
+				: (r.espejo ? '<span class="label label-info">CON CORTE ' + HoraAmPm(r.hora_corte) + '</span>'
+				            : '<span class="label label-danger">FALTA HACER EL CORTE</span> <button class="btn btn-danger btn-xs" id="btnEspejoGenerar">Hacer corte</button>')) +
 			' &nbsp; Tarde: ' + (r.tarde_abierta ? '<span class="label label-success">ABIERTA</span>' : '<span class="label label-default">DESDE ' + HoraAmPm(r.hora_tarde) + '</span>'));
 
 		if(primera){
@@ -185,6 +189,9 @@ function PintarCliente(r){
 		(c.razon_comercial && c.nombres && c.razon_comercial != c.nombres ? ' <small>(' + Esc(c.nombres) + ')</small>' : ''));
 	$('#SpCompras').text(Moneda(r.compra_total));
 	$('#comprasLabPart').text(Moneda(r.compra_labs));
+	$('#SpComprasAm').text(Moneda(r.compra_total_am));
+	$('#SpLabsAm').text(Moneda(r.compra_labs_am));
+	$('#evFuenteCorte').html(r.usa_espejo ? '<span class="label label-info">CORTE</span>' : '<span class="label label-warning">VENTA ACTUAL</span>');
 	$('#n_lab_compas').text(r.labs_con_compra);
 	$('#n_lab_sin_compas').text(r.n_labs - r.labs_con_compra);
 	$('#evRegistrado').html((r.registrado
@@ -202,16 +209,14 @@ function PintarCliente(r){
 function TarjetaDinamica(d){
 	var r = d.regla, html = '', clase, botones = '';
 	var nombre = EV_DATOS.cliente.codigo_sap + ' - ' + (EV_DATOS.cliente.razon_comercial || EV_DATOS.cliente.nombres);
+	var tituloCompra = d.ventana == 'manana' ? (EV_DATOS.usa_espejo ? 'Compra al corte' : 'Compra hasta ahora') : 'Compra total';
 
 	html += '<small>' + (d.grupo_especial ? 'Regla grupo ' + Esc(EV_DATOS.grupo) : 'Regla general') + ': ' + TextoRegla(r) + '</small>';
-	// Cerrada sin ganador: no se muestra avance (ya no se puede registrar)
-	if(d.estado != 'CERRADA'){
-		if(r.total_min > 0){
-			html += 'Compra total:' + Barra(d.compra_total, r.total_min, 'warning', Moneda(d.compra_total) + ' / ' + Moneda(r.total_min));
-		}
-		if(r.n_labs > 0){
-			html += 'Labs con ' + Moneda(r.lab_min) + ':' + Barra(d.labs_cumple, r.n_labs, 'warning');
-		}
+	if(r.total_min > 0){
+		html += tituloCompra + ':' + Barra(d.compra_total, r.total_min, 'warning', Moneda(d.compra_total) + ' / ' + Moneda(r.total_min));
+	}
+	if(r.n_labs > 0){
+		html += 'Labs con ' + Moneda(r.lab_min) + ':' + Barra(d.labs_cumple, r.n_labs, 'warning');
 	}
 
 	var g = d.ganador;
@@ -220,7 +225,7 @@ function TarjetaDinamica(d){
 		case 'ADICIONALES':
 			clase = 'ev-done';
 			html += '<div class="alert alert-info" style="margin:0 0 6px 0;"><b>GANÓ</b> ' + g.boletas + ' boleta(s) el ' + Esc(g.fecha) +
-			        ' con una compra de <b>' + Moneda(g.compra_total) + '</b>.<br>Redimidas: <b>' + g.boletas_redimidas + ' de ' + g.boletas + '</b>' +
+			        ' con ' + Moneda(g.compra_total) + '.<br>Redimidas: <b>' + g.boletas_redimidas + ' de ' + g.boletas + '</b>' +
 			        (g.fecha_redencion ? ' (' + Esc(g.fecha_redencion) + ')' : '') + '</div>';
 			if(d.estado == 'ADICIONALES'){
 				html += '<div class="alert alert-success" style="margin:0 0 6px 0;">Con su compra actual gana <b>' + d.adicionales + '</b> boleta(s) adicional(es)</div>';
@@ -230,10 +235,11 @@ function TarjetaDinamica(d){
 			clase = 'ev-no';
 			html += '<div class="alert alert-danger" style="margin:0;">Ya ganó otra dinámica de la mañana</div>';
 			break;
-		case 'CERRADA':
+		case 'SIN_CORTE':
 			clase = 'ev-off';
-			html += '<div class="alert alert-default" style="margin:0; background:#eee;">Dinámica cerrada a las ' + HoraAmPm(EV_CONFIG.hora_corte) +
-			        '. El cliente no quedó registrado como ganador.</div>';
+			html += '<div class="alert alert-danger" style="margin:0 0 6px 0;">Ya pasaron las ' + HoraAmPm(EV_CONFIG.hora_corte) +
+			        '. <b>Falta hacer el corte</b> para validar esta dinámica.</div>';
+			botones += '<button class="btn btn-danger btn-lg" id="btnEspejoGenerar"><span class="fa fa-scissors"></span> Hacer corte</button> ';
 			break;
 		case 'NO_HABILITADA':
 			clase = d.cumple ? 'ev-ok' : 'ev-wait';
@@ -282,12 +288,13 @@ function FaltaTexto(d){
 function PintarDetalleLabs(r){
 	var html = '', ok = '<span class="fa fa-check text-success"></span>', no = '<span class="fa fa-times text-danger"></span>';
 	$.each(r.labs, function(i, l){
-		var c = parseFloat(l.compra) || 0;
+		var c = parseFloat(l.compra) || 0, am = parseFloat(l.compra_am) || 0;
 		var fila = c >= 1000000 ? 'success' : (c <= 0 ? 'text-muted' : '');
 		html += '<tr class="' + fila + '">' +
 		          '<td>' + (i + 1) + '</td>' +
 		          '<td>' + Esc(l.nit) + '</td>' +
 		          '<td>' + Esc(l.nombres) + '</td>' +
+		          '<td class="text-right">' + Moneda(am) + '</td>' +
 		          '<td class="text-right">' + Moneda(c) + '</td>' +
 		          '<td class="text-center">' + (c >= 100000 ? ok : no) + '</td>' +
 		          '<td class="text-center">' + (c >= 1000000 ? ok : no) + '</td>' +
@@ -389,5 +396,46 @@ function CargarGanadores(){
 			        '</tr>';
 		});
 		$('#evGanadores').html(html || '<tr><td colspan="12" class="text-center">Sin ganadores</td></tr>');
+	});
+}
+
+/* ---------------------------- corte 12:00 ---------------------------- */
+function CargarEspejo(){
+	EvPost({ op: 'EV_ESPEJO_LISTA' }, function(r){
+		var e = r.espejo, html = '';
+		if(!e){
+			$('#evEspejoEstado').html('<div class="alert alert-warning">' + (EV_CONFIG.manana_abierta
+				? 'El corte se hace a partir de las <b>' + HoraAmPm(EV_CONFIG.hora_corte) + '</b>. Hasta entonces las dinámicas de la mañana se validan con la venta actual.'
+				: 'Ya pasaron las <b>' + HoraAmPm(EV_CONFIG.hora_corte) + '</b> y no se ha hecho el corte. <button class="btn btn-danger btn-sm" id="btnEspejoGenerar"><span class="fa fa-scissors"></span> Hacer corte</button>') + '</div>');
+		}else{
+			$('#evEspejoEstado').html('<div class="alert alert-info">Corte de las <b>' + Esc(e.fecha_corte) + '</b>, hecho el ' +
+				Esc(e.fecha_generacion) + (e.usuario ? ' por ' + Esc(e.usuario) : '') + ' (' + e.clientes + ' clientes con compra).</div>');
+		}
+		$.each(r.rows, function(i, x){
+			html += '<tr>' +
+			          '<td>' + (i + 1) + '</td>' +
+			          '<td>' + Esc(x.passport) + '</td>' +
+			          '<td>' + Esc(x.nombres) + '</td>' +
+			          '<td>' + Esc(x.grupo) + '</td>' +
+			          '<td class="text-right">' + Moneda(x.compra_total) + '</td>' +
+			          '<td class="text-right">' + Moneda(x.compra_labs) + '</td>' +
+			          '<td class="text-center">' + Esc(x.n_labs) + '</td>' +
+			          '<td class="text-center">' + (x.ganadas > 0 ? '<span class="label label-primary">' + x.ganadas + '</span>' : '') + '</td>' +
+			        '</tr>';
+		});
+		$('#evEspejoLista').html(html || '<tr><td colspan="8" class="text-center">Sin datos</td></tr>');
+	});
+}
+
+function GenerarEspejo(){
+	EvConfirmar('¿Hacer el corte de las ' + HoraAmPm(EV_CONFIG.hora_corte) + '?',
+		'Se guarda la venta de todos los clientes hasta las ' + HoraAmPm(EV_CONFIG.hora_corte) +
+		'. Después de esto las dinámicas #1 y #2 se validan con esa información. Se hace una sola vez.', function(){
+		EvPost({ op: 'EV_ESPEJO_GENERAR' }, function(r){
+			EvAviso('success', 'Corte realizado:', (r.espejo ? r.espejo.clientes + ' clientes con compra' : ''), true);
+			CargarConfig();
+			CargarEspejo();
+			ConsultarClienteActual();
+		});
 	});
 }
