@@ -265,9 +265,6 @@ function TarjetaDinamica(d){
 		botones += '<button class="btn btn-primary btn-lg ev-redimir" data-id="' + g.id + '" data-pend="' + (g.boletas - g.boletas_redimidas) +
 		           '" data-nombre="' + Esc(nombre) + '"><span class="fa fa-gift"></span> Redimir ' + (g.boletas - g.boletas_redimidas) + '</button> ';
 	}
-	if(g && g.boletas_redimidas > 0){
-		botones += '<button class="btn btn-default btn-lg ev-imprimir" data-id="' + g.id + '"><span class="fa fa-print"></span></button>';
-	}
 
 	return '<div class="col-md-3 col-sm-6"><div class="ev-card ev-din ' + clase + '">' +
 	         '<h4>' + Esc(d.nombre) + '</h4>' + html +
@@ -388,7 +385,6 @@ function CargarGanadores(){
 			          '<td>' + Esc(g.usuario) + '</td>' +
 			          '<td style="white-space:nowrap;">' +
 			            (pend > 0 ? '<button class="btn btn-xs btn-primary ev-redimir" data-id="' + g.id + '" data-pend="' + pend + '" data-nombre="' + Esc(nombre) + '"><span class="fa fa-gift"></span> Redimir</button> ' : '') +
-			            (g.boletas_redimidas > 0 ? '<button class="btn btn-xs btn-default ev-imprimir" data-id="' + g.id + '"><span class="fa fa-print"></span></button>' : '') +
 			          '</td>' +
 			        '</tr>';
 		});

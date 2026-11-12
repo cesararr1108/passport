@@ -40,6 +40,9 @@
 	.nav-tabs > li > a{ font-weight: bold; }
 	#ResultadosRifas tr.success > td{ background-color: #dff0d8 !important; color: #2b542c; font-weight: bold; }
 	#evReloj{ font-size: 16px; }
+	.ev-info-box{ background: #eef3f8; border: 1px solid #c9d6e3; border-radius: 8px; padding: 10px 12px 0 12px; }
+	.ev-info-box .ev-card{ background: #fff; }
+	.ev-seccion{ font-size: 13px; font-weight: bold; color: #555; letter-spacing: .5px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #ddd; }
 </style>
 </head>
 <body oncontextmenu="return false;">
@@ -86,6 +89,9 @@
       <div id="evMensaje" style="margin-top:15px;"></div>
 
       <div id="evResultado" style="display:none; margin-top:15px;">
+        <!-- Información de compra del cliente (general, no pertenece a ninguna dinámica) -->
+        <div class="ev-info-box">
+        <div class="ev-seccion"><span class="fa fa-shopping-cart"></span> INFORMACIÓN DE COMPRA DEL CLIENTE</div>
         <div class="row">
           <div class="col-md-2 col-sm-6">
             <div class="ev-card"><small>COMPRA TOTAL</small><div class="ev-big" id="SpCompras"></div></div>
@@ -110,7 +116,10 @@
           </div>
         </div>
 
+        </div>
+
         <!-- Una tarjeta por dinámica -->
+        <div class="ev-seccion" style="margin-top:20px;"><span class="fa fa-trophy"></span> DINÁMICAS</div>
         <div class="row" id="evDinamicasCliente"></div>
 
         <h3 class="text-center">DETALLE DE COMPRAS POR LABORATORIO PATROCINADOR</h3>
