@@ -69,6 +69,22 @@ function Kpi(col, titulo, valor, sub, icono, color){
 	       '</div></div>';
 }
 
+/* Pinta una tabla y le pone a cada celda el nombre de su columna (data-label),
+   para que en celular cada fila se vea como una tarjeta. */
+function Tabla(sel, html){
+	var $t = $(sel).html(html);
+	var titulos = $t.find('thead th').map(function(){ return $(this).text(); }).get();
+	$t.find('tbody tr, tfoot tr').each(function(){
+		var col = 0;
+		$(this).children('td').each(function(){
+			var span = parseInt($(this).attr('colspan'), 10) || 1;
+			if(span > 1){ $(this).addClass('rp-ancha'); }
+			else if(titulos[col]){ $(this).attr('data-label', titulos[col]); }
+			col += span;
+		});
+	});
+}
+
 /* ------------------------------ carga ------------------------------ */
 function Reportes(){
 	$('#Refrescar').prop('disabled', true).find('.fa').addClass('fa-spin');
@@ -191,7 +207,7 @@ function PintarDashboard(){
 	     '<td>' + Barra(t.cumpl) + '</td><td class="rp-num">' + (t.venta >= t.cuota ? 'Cumplida' : Mon(t.cuota - t.venta)) + '</td>' +
 	     '<td class="rp-num">' + Mon(t.anterior) + '</td><td class="rp-num">' + Crec(t.crec) + '</td><td class="rp-num">100%</td>' +
 	     '<td class="rp-num">' + Ent(t.asistentes) + '</td></tr></tfoot>';
-	$('#rpTablaSedes').html(h);
+	Tabla('#rpTablaSedes', h);
 
 	// Registro P / V por sede
 	var conOtros = t.reg_o > 0;
@@ -211,7 +227,7 @@ function PintarDashboard(){
 	h += '</tbody><tfoot><tr><td>TOTAL</td><td class="rp-num">' + Ent(t.reg_p) + '</td><td class="rp-num">' + Ent(t.reg_v) + '</td>' +
 	     (conOtros ? '<td class="rp-num">' + Ent(t.reg_o) + '</td>' : '') +
 	     '<td class="rp-num">' + Ent(t.reg) + '</td><td class="rp-num">' + Ent(t.con_compra) + '</td><td class="rp-num">' + Ent(t.sin_compra) + '</td></tr></tfoot>';
-	$('#rpTablaRegistro').html(t.reg > 0 ? h : '<tbody><tr><td class="text-center text-muted">Sin clientes registrados</td></tr></tbody>');
+	Tabla('#rpTablaRegistro', t.reg > 0 ? h : '<tbody><tr><td class="text-center text-muted">Sin clientes registrados</td></tr></tbody>');
 
 	// Top 10 zonas con menos venta (solo zonas con cuota asignada)
 	var bottom = $.grep(RP.zonas, function(z){ return z.cuota > 0; })
@@ -223,13 +239,13 @@ function PintarDashboard(){
 		     '<td>' + SedePunto(z.oficina) + Esc(SedeNombre(z.oficina, z.OFICINA_DESCRIPCION)) + '</td>' +
 		     '<td class="rp-num"><b>' + Mon(z.venta) + '</b></td><td class="rp-num">' + Mon(z.cuota) + '</td><td>' + Barra(z.cumpl) + '</td></tr>';
 	});
-	$('#rpTablaBottom').html(h + '</tbody>');
+	Tabla('#rpTablaBottom', h + '</tbody>');
 }
 
 /* ------------------------------ zonas ------------------------------ */
 function PintarZonas(){
 	if(RP.zonas.length == 0){
-		$('#rpTablaZonas').html('<tbody><tr><td class="text-center">NO EXISTEN RESULTADOS</td></tr></tbody>');
+		Tabla('#rpTablaZonas', '<tbody><tr><td class="text-center">NO EXISTEN RESULTADOS</td></tr></tbody>');
 		return;
 	}
 	var t = Totales();
@@ -253,7 +269,7 @@ function PintarZonas(){
 	h += '</tbody><tfoot><tr><td colspan="2">TOTAL EVENTO</td><td class="rp-num">' + Mon(t.cuota) + '</td><td class="rp-num">' + Mon(t.venta) + '</td>' +
 	     '<td>' + Barra(t.cumpl) + '</td><td class="rp-num">' + (t.venta >= t.cuota ? 'Cumplida' : Mon(t.cuota - t.venta)) + '</td>' +
 	     '<td class="rp-num">' + Ent(t.asistentes) + '</td></tr></tfoot>';
-	$('#rpTablaZonas').html(h);
+	Tabla('#rpTablaZonas', h);
 }
 
 /* ------------------------------ sin compras ------------------------------ */
@@ -286,6 +302,6 @@ function PintarSinCompra(){
 		               c.tipo == 'V' ? '<span class="label label-info">VIRTUAL</span>' : '<span class="label label-default">SIN TIPO</span>') + '</td></tr>';
 	});
 	if(n == 0){ h += '<tr><td colspan="8" class="text-center text-muted">No hay clientes registrados sin compras con este filtro</td></tr>'; }
-	$('#rpTablaSin').html(h + '</tbody>');
+	Tabla('#rpTablaSin', h + '</tbody>');
 	$('#rpConteoSin').text(n + ' cliente(s) sin compras');
 }
