@@ -76,9 +76,9 @@ function evDinamicas(){
 			'ventana' => 'tarde',
 			'reglas'  => array(
 				EV_GRUPO_ESPECIAL => array('total_min' => 6000000, 'lab_min' => 100000, 'n_labs' => 20,
-				             'boletas' => 1, 'extra_desde' => 0, 'extra_cada' => 0),
+				             'boletas' => 1, 'extra_desde' => 6000000, 'extra_cada' => 1000000),
 				'*' => array('total_min' => 15000000, 'lab_min' => 1000000, 'n_labs' => 10,
-				             'boletas' => 1, 'extra_desde' => 0, 'extra_cada' => 0)
+				             'boletas' => 1, 'extra_desde' => 15000000, 'extra_cada' => 1000000)
 			)
 		),
 		'ELECTRO' => array(
